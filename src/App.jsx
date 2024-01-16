@@ -1,6 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useReducer } from "react";
 import "./App.css";
-import { useReducer } from "react";
 
 import PropTypes from "prop-types";
 
@@ -41,6 +40,17 @@ function reducer(state, action) {
         ...state,
         answer: action.payload,
       };
+    case "newQuestion":
+      return {
+        ...state,
+        answer: null,
+        allOptions: [
+          ...state.questions?.[state.qindex]?.incorrect_answers,
+          state.questions?.[state.qindex]?.correct_answer,
+        ].sort(() => Math.random() - 0.6),
+        correctOption: state.questions?.[state.qindex]?.correct_answer,
+        qindex: state.qindex + 1,
+      };
     default:
       throw new Error("Action unknown");
   }
@@ -57,7 +67,7 @@ function App() {
     )
       .then((res) => res.json())
       .then((data) => {
-        console.log(data.results?.[0]);
+        console.log(data.results?.[qindex]);
         dispatch({
           type: "dataRecieved",
           payload: data.results,
@@ -92,6 +102,7 @@ function App() {
             correctOption={correctOption}
             answer={answer}
             dispatch={dispatch}
+            qindex={qindex}
           />
         )}
       </div>
@@ -123,13 +134,22 @@ StartScreen.propTypes = {
   dispatch: PropTypes.func,
 };
 
-function Questions({ question, options, correctOption, answer, dispatch }) {
+function Questions({
+  question,
+  options,
+  correctOption,
+  answer,
+  dispatch,
+  qindex,
+}) {
   let correctCss = (index) =>
     answer !== null
       ? index === options.indexOf(correctOption)
         ? "bg-green-400"
         : "bg-red-400"
       : "";
+
+  console.log(`answer =${answer}`);
 
   return (
     <div>
@@ -143,7 +163,7 @@ function Questions({ question, options, correctOption, answer, dispatch }) {
                 key={option}
                 disabled={answer != null}
                 className={`bg-gray-500 w-[40%] m-4 py-2 rounded-lg gap-4 text-white ${
-                  answer === index ? "bg-gray-700" : ""
+                  answer === index ? "bg-gray-700 underline" : ""
                 } ${correctCss(index)}`}
                 onClick={() => dispatch({ type: "answered", payload: index })}
               >{`${option}`}</button>
@@ -151,6 +171,7 @@ function Questions({ question, options, correctOption, answer, dispatch }) {
           </li>
         </ul>
       </div>
+      <Footer qindex={qindex} dispatch={dispatch} answer={answer} />
     </div>
   );
 }
@@ -161,5 +182,38 @@ Questions.propTypes = {
   answer: PropTypes.number,
   dispatch: PropTypes.func,
   correctOption: PropTypes.string,
+  qindex: PropTypes.number,
 };
+
+function Footer({ qindex, dispatch, answer }) {
+  console.log(`qindex = ${qindex}`);
+  return (
+    <div className="w-full justify-center items-center content-center mx-4 py-2">
+      <Timer />
+      <div>
+        <button
+          className={`${
+            qindex === 0 && answer === null ? "hidden" : ""
+          } bg-gray-700 text-white rounded-lg px-4 py-2 float-right`}
+          onClick={() => dispatch({ type: "newQuestion", payload: qindex })}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+Footer.propTypes = {
+  qindex: PropTypes.number,
+  dispatch: PropTypes.func,
+};
+
+function Timer() {
+  return (
+    <div className="bg-gray-700 text-white rounded-lg px-4 py-2 w-16 float-left">
+      5:00
+    </div>
+  );
+}
 export default App;
