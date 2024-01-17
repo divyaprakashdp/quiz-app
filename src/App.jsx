@@ -11,6 +11,7 @@ const intialState = {
   status: "loading",
   qindex: 0,
   answer: null,
+  points: 0,
 };
 function reducer(state, action) {
   switch (action.type) {
@@ -18,11 +19,6 @@ function reducer(state, action) {
       return {
         ...state,
         questions: action.payload,
-        allOptions: [
-          ...action.payload?.[state.qindex]?.incorrect_answers,
-          action.payload?.[state.qindex]?.correct_answer,
-        ].sort(() => Math.random() - 0.6),
-        correctOption: action.payload?.[state.qindex]?.correct_answer,
         status: "ready",
       };
     case "dataFailed":
@@ -38,18 +34,19 @@ function reducer(state, action) {
     case "answered":
       return {
         ...state,
-        answer: action.payload,
+        answer: action.payload.index,
+        points: action.payload.points,
       };
     case "newQuestion":
       return {
         ...state,
         answer: null,
-        allOptions: [
-          ...state.questions?.[state.qindex]?.incorrect_answers,
-          state.questions?.[state.qindex]?.correct_answer,
-        ].sort(() => Math.random() - 0.6),
-        correctOption: state.questions?.[state.qindex]?.correct_answer,
         qindex: state.qindex + 1,
+      };
+    case "finished":
+      return {
+        ...state,
+        status: "finished",
       };
     default:
       throw new Error("Action unknown");
@@ -57,17 +54,21 @@ function reducer(state, action) {
 }
 
 function App() {
-  const [
-    { questions, status, qindex, answer, allOptions, correctOption },
-    dispatch,
-  ] = useReducer(reducer, intialState);
+  const [{ questions, status, qindex, answer, points }, dispatch] = useReducer(
+    reducer,
+    intialState
+  );
   useEffect(function () {
     fetch(
       "https://opentdb.com/api.php?amount=10&category=23&difficulty=easy&type=multiple"
     )
       .then((res) => res.json())
       .then((data) => {
-        console.log(data.results?.[qindex]);
+        console.log(data);
+        if (data.response_code > 0) {
+          throw Error("error");
+        }
+
         dispatch({
           type: "dataRecieved",
           payload: data.results,
@@ -82,9 +83,9 @@ function App() {
 
   return (
     <div className="h-screen w-full">
-      <h1 className="font-heading text-6xl">Quiz App</h1>
-      <p>Unleash Your Inner Smarty Pants</p>
-      <div>
+      <h1 className="font-heading text-8xl">Quiz App</h1>
+      <p className="text-2xl">Unleash Your Inner Smarty Pants</p>
+      <div className="items-center justify-center ">
         {status === "loading" && <Loader />}
         {status === "error" && <Error />}
         {status === "ready" && (
@@ -95,15 +96,26 @@ function App() {
           />
         )}
         {status === "active" && (
-          <Questions
-            question={questions?.[qindex]?.question}
-            index={qindex}
-            options={allOptions}
-            correctOption={correctOption}
-            answer={answer}
-            dispatch={dispatch}
-            qindex={qindex}
-          />
+          <>
+            <Header qindex={qindex} questions={questions} points={points} />
+            <Questions
+              question={questions?.[qindex]?.question}
+              index={qindex}
+              options={[
+                ...questions?.[qindex]?.incorrect_answers,
+                questions?.[qindex]?.correct_answer,
+              ]}
+              correctOption={questions?.[qindex]?.correct_answer}
+              answer={answer}
+              dispatch={dispatch}
+              qindex={qindex}
+              points={points}
+            />
+            <Footer qindex={qindex} dispatch={dispatch} answer={answer} />
+          </>
+        )}
+        {status === "finished" && (
+          <Finished points={points} questions={questions} />
         )}
       </div>
     </div>
@@ -115,7 +127,11 @@ function Loader() {
 }
 
 function Error() {
-  return <div>Error fetching the questions!</div>;
+  return (
+    <div className="text-xl p-2 bg-red-200 rounded-lg w-[40%]">
+      Error fetching the questions! <br /> Try Reloading
+    </div>
+  );
 }
 
 function StartScreen({ category, dispatch }) {
@@ -140,7 +156,7 @@ function Questions({
   correctOption,
   answer,
   dispatch,
-  qindex,
+  points,
 }) {
   let correctCss = (index) =>
     answer !== null
@@ -148,8 +164,10 @@ function Questions({
         ? "bg-green-400"
         : "bg-red-400"
       : "";
-
+  let score = (index) =>
+    points + (index === options.indexOf(correctOption) ? 10 : 0);
   console.log(`answer =${answer}`);
+  console.log(`correct option => ${correctOption}`);
 
   return (
     <div>
@@ -165,13 +183,17 @@ function Questions({
                 className={`bg-gray-500 w-[40%] m-4 py-2 rounded-lg gap-4 text-white ${
                   answer === index ? "bg-gray-700 underline" : ""
                 } ${correctCss(index)}`}
-                onClick={() => dispatch({ type: "answered", payload: index })}
+                onClick={() =>
+                  dispatch({
+                    type: "answered",
+                    payload: { index: index, points: score(index) },
+                  })
+                }
               >{`${option}`}</button>
             ))}
           </li>
         </ul>
       </div>
-      <Footer qindex={qindex} dispatch={dispatch} answer={answer} />
     </div>
   );
 }
@@ -183,6 +205,27 @@ Questions.propTypes = {
   dispatch: PropTypes.func,
   correctOption: PropTypes.string,
   qindex: PropTypes.number,
+  points: PropTypes.number,
+};
+
+function Header({ qindex, questions, points }) {
+  return (
+    <div className="w-full mx-4 py-2">
+      <ProgressBar qindex={qindex} />
+      <p className="float-left">{`Question: ${qindex + 1}/${
+        questions.length
+      }`}</p>
+      <p className="float-left">{`Score: ${points}/${
+        questions.length * 10
+      }`}</p>
+    </div>
+  );
+}
+
+Header.propTypes = {
+  qindex: PropTypes.number,
+  questions: PropTypes.array,
+  points: PropTypes.number,
 };
 
 function Footer({ qindex, dispatch, answer }) {
@@ -190,16 +233,30 @@ function Footer({ qindex, dispatch, answer }) {
   return (
     <div className="w-full justify-center items-center content-center mx-4 py-2">
       <Timer />
-      <div>
-        <button
-          className={`${
-            qindex === 0 && answer === null ? "hidden" : ""
-          } bg-gray-700 text-white rounded-lg px-4 py-2 float-right`}
-          onClick={() => dispatch({ type: "newQuestion", payload: qindex })}
-        >
-          Next
-        </button>
-      </div>
+      {qindex < 9 && (
+        <div>
+          <button
+            className={`${
+              qindex === 0 && answer === null ? "hidden" : ""
+            } bg-gray-700 text-white rounded-lg px-4 py-2 float-right`}
+            onClick={() => dispatch({ type: "newQuestion" })}
+          >
+            Next
+          </button>
+        </div>
+      )}
+      {qindex === 9 && (
+        <div>
+          <button
+            className={`${
+              qindex === 0 && answer === null ? "hidden" : ""
+            } bg-gray-700 text-white rounded-lg px-4 py-2 float-right`}
+            onClick={() => dispatch({ type: "finished" })}
+          >
+            Finish
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -207,12 +264,42 @@ function Footer({ qindex, dispatch, answer }) {
 Footer.propTypes = {
   qindex: PropTypes.number,
   dispatch: PropTypes.func,
+  answer: PropTypes.number,
 };
 
 function Timer() {
   return (
     <div className="bg-gray-700 text-white rounded-lg px-4 py-2 w-16 float-left">
       5:00
+    </div>
+  );
+}
+
+function Finished({ points, questions }) {
+  return (
+    <div>
+      <p>{`You Scored ${points} out of ${questions.length * 10}`}</p>
+    </div>
+  );
+}
+
+Finished.propTypes = {
+  points: PropTypes.number,
+  questions: PropTypes.array,
+};
+
+//TODO
+function ProgressBar({ qindex }) {
+  let progressPercentage = (qindex + 1) * 10;
+  return (
+    <div className="w-full bg-gray-200 rounded-lg">
+      <div
+        className={`bg-blue-600 text-xs font-medium text-blue-100 text-center p-.8 leading-none rounded-lg w-[${
+          (qindex + 1) * 10
+        }%]`}
+      >
+        {`${progressPercentage}%`}
+      </div>
     </div>
   );
 }
