@@ -7,11 +7,12 @@ const intialState = {
   questions: [],
   allOptions: [],
   correctOption: null,
-  //status -> loading, error, ready, active, finished
+  //status -> loading, error, ready, active, answered, newQuestion, finished, restart
   status: "loading",
   qindex: 0,
   answer: null,
   points: 0,
+  remainingTime: 120,
 };
 function reducer(state, action) {
   switch (action.type) {
@@ -47,6 +48,22 @@ function reducer(state, action) {
       return {
         ...state,
         status: "finished",
+      };
+    case "restart":
+      return {
+        ...state,
+        allOptions: [],
+        correctOption: null,
+        status: "ready",
+        qindex: 0,
+        answer: null,
+        points: 0,
+      };
+    case "tick":
+      return {
+        ...state,
+        remainingTime: state.remainingTime - 1,
+        status: state.remainingTime === 0 ? "finished" : state.status,
       };
     default:
       throw new Error("Action unknown");
@@ -115,7 +132,7 @@ function App() {
           </>
         )}
         {status === "finished" && (
-          <Finished points={points} questions={questions} />
+          <Finished points={points} questions={questions} dispatch={dispatch} />
         )}
       </div>
     </div>
@@ -139,7 +156,12 @@ function StartScreen({ category, dispatch }) {
     <div>
       <h2>{`Welcome to the quiz on ${category}!`}</h2>
       <p>{`10 questions to test your mastery`}</p>
-      <button onClick={() => dispatch({ type: "start" })}>Let's Start</button>
+      <button
+        className="bg-gray-500 w-20 mt-4 py-2 rounded-lg gap-4 text-white enabled:hover:bg-gray-600 enabled:hover:scale-110 duration-300"
+        onClick={() => dispatch({ type: "start" })}
+      >
+        Start
+      </button>
     </div>
   );
 }
@@ -180,7 +202,7 @@ function Questions({
               <button
                 key={option}
                 disabled={answer != null}
-                className={`bg-gray-500 w-[40%] m-4 py-2 rounded-lg gap-4 text-white ${
+                className={`bg-gray-500 w-[40%] m-4 py-2 rounded-lg gap-4 text-white enabled:hover:bg-gray-600 enabled:hover:scale-110 duration-300 ${
                   answer === index ? "bg-gray-700 underline" : ""
                 } ${correctCss(index)}`}
                 onClick={() =>
@@ -212,12 +234,12 @@ function Header({ qindex, questions, points }) {
   return (
     <div className="w-full mx-4 py-2">
       <ProgressBar qindex={qindex} />
-      <p className="float-left">{`Question: ${qindex + 1}/${
+      <div className="float-left">{`Question: ${qindex + 1}/${
         questions.length
-      }`}</p>
-      <p className="float-left">{`Score: ${points}/${
+      }`}</div>
+      <div className="float-right">{`Score: ${points}/${
         questions.length * 10
-      }`}</p>
+      }`}</div>
     </div>
   );
 }
@@ -275,10 +297,16 @@ function Timer() {
   );
 }
 
-function Finished({ points, questions }) {
+function Finished({ points, questions, dispatch }) {
   return (
     <div>
       <p>{`You Scored ${points} out of ${questions.length * 10}`}</p>
+      <button
+        className="bg-gray-500 w-20 m-4 py-2 rounded-lg gap-4 text-white enabled:hover:bg-gray-600 enabled:hover:scale-110 duration-300"
+        onClick={() => dispatch({ type: "restart" })}
+      >
+        Restart
+      </button>
     </div>
   );
 }
@@ -288,19 +316,22 @@ Finished.propTypes = {
   questions: PropTypes.array,
 };
 
-//TODO
 function ProgressBar({ qindex }) {
-  let progressPercentage = (qindex + 1) * 10;
+  // useEffect((),[qindex])
+  let progressWidth = (qindex + 1) * 10;
   return (
-    <div className="w-full bg-gray-200 rounded-lg">
+    <div className="w-full bg-gray-200 rounded-lg mt-4">
       <div
-        className={`bg-blue-600 text-xs font-medium text-blue-100 text-center p-.8 leading-none rounded-lg w-[${
-          (qindex + 1) * 10
-        }%]`}
+        className={`bg-blue-600 text-xs font-medium text-blue-100 text-center  leading-none rounded-lg `}
+        style={{ width: `${progressWidth}%` }}
       >
-        {`${progressPercentage}%`}
+        {`${progressWidth}%`}
       </div>
     </div>
   );
 }
+
+ProgressBar.propTypes = {
+  qindex: PropTypes.number,
+};
 export default App;
